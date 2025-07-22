@@ -8,6 +8,9 @@ from .mcp_server import (
     get_paginated_tables,
     create_page_token,
     table_pagination_cache,
+    create_chdb_client,
+    run_chdb_select_query,
+    chdb_initial_prompt,
 )
 
 __all__ = [
@@ -20,4 +23,7 @@ __all__ = [
     "get_paginated_tables",
     "create_page_token",
     "table_pagination_cache",
+    "create_chdb_client",
+    "run_chdb_select_query",
+    "chdb_initial_prompt",
 ]
