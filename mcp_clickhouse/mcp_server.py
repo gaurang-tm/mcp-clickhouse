@@ -1,19 +1,27 @@
 import logging
+import json
 from typing import Sequence, Dict, Any, Optional, List, TypedDict
 import concurrent.futures
 import atexit
+import os
 import uuid
 
 import clickhouse_connect
 import chdb.session as chs
-from clickhouse_connect.driver.binding import format_query_value
+from clickhouse_connect.driver.binding import quote_identifier, format_query_value
 from dotenv import load_dotenv
-from mcp.server.fastmcp import FastMCP
-from cachetools import TTLCache
+from fastmcp import FastMCP
+from fastmcp.tools import Tool
+from fastmcp.prompts import Prompt
+from fastmcp.exceptions import ToolError
+from dataclasses import dataclass, field, asdict, is_dataclass
+from starlette.requests import Request
+from starlette.responses import PlainTextResponse
 
 from mcp_clickhouse.mcp_env import get_config, get_chdb_config
 from mcp_clickhouse.chdb_prompt import CHDB_PROMPT
 
+from cachetools import TTLCache
 
 @dataclass
 class Column:
@@ -31,9 +39,6 @@ class Table:
     database: str
     name: str
     engine: str
-    create_table_query: str
-    dependencies_database: str
-    dependencies_table: str
     engine_full: str
     sorting_key: str
     primary_key: str
@@ -67,6 +72,7 @@ deps = [
     "uvicorn",
     "pip-system-certs",
     "cachetools",
+    "chdb"
 ]
 
 mcp = FastMCP(MCP_SERVER_NAME, dependencies=deps)
@@ -78,7 +84,7 @@ class TableInfo(TypedDict):
     name: str
     comment: Optional[str]
     columns: List[Dict[str, Any]]
-    create_table_query: str
+    # create_table_query: str
     row_count: int
     column_count: int
 
@@ -119,7 +125,7 @@ def get_table_info(
     schema_result = client.query(schema_query)
 
     columns = []
-    column_names = schema_result.column_names
+    column_names = schema_result.column_names[:2]
     for row in schema_result.result_rows:
         column_dict = {}
         for i, col_name in enumerate(column_names):
@@ -137,21 +143,20 @@ def get_table_info(
     row_count = row_count_result.result_rows[0][0] if row_count_result.result_rows else 0
     column_count = len(columns)
 
-    create_table_query = f"SHOW CREATE TABLE {database}.`{table}`"
-    create_table_result = client.command(create_table_query)
+    # create_table_query = f"SHOW CREATE TABLE {database}.`{table}`"
+    # create_table_result = client.command(create_table_query)
 
     return {
         "database": database,
         "name": table,
         "comment": table_comments.get(table),
         "columns": columns,
-        "create_table_query": create_table_result,
+        # "create_table_query": create_table_result,
         "row_count": row_count,
         "column_count": column_count,
     }
 
 
-@mcp.tool()
 def list_databases():
     """List available ClickHouse databases"""
     logger.info("Listing all databases")
@@ -276,7 +281,6 @@ def create_page_token(database: str, like: str, table_names: List[str], end_idx:
     return token
 
 
-@mcp.tool()
 def list_tables(database: str, like: str = None, page_token: str = None, page_size: int = 50):
     """List available ClickHouse tables in a database, including schema, comment,
     row count, and column count.
