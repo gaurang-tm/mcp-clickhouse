@@ -6,6 +6,8 @@ from .mcp_server import (
     create_chdb_client,
     run_chdb_select_query,
     chdb_initial_prompt,
+    list_columns,
+    get_terminology
 )
 
 __all__ = [
@@ -16,4 +18,6 @@ __all__ = [
     "create_chdb_client",
     "run_chdb_select_query",
     "chdb_initial_prompt",
+    "list_columns",
+    "get_terminology"
 ]

@@ -37,20 +37,14 @@ class Table:
     database: str
     name: str
     engine: str
-    create_table_query: str
-    dependencies_database: str
-    dependencies_table: str
-    engine_full: str
-    sorting_key: str
-    primary_key: str
     total_rows: int
-    total_bytes: int
-    total_bytes_uncompressed: int
-    parts: int
-    active_parts: int
-    total_marks: int
     comment: Optional[str] = None
-    columns: List[Column] = field(default_factory=list)
+
+
+@dataclass
+class Catalog:
+    key: str
+    description: str
 
 
 MCP_SERVER_NAME = "mcp-clickhouse"
@@ -102,6 +96,10 @@ def result_to_column(query_columns, result) -> List[Column]:
     return [Column(**dict(zip(query_columns, row))) for row in result]
 
 
+def result_to_catalog(query_columns, result) -> List[Catalog]:
+    return [Catalog(**dict(zip(query_columns, row))) for row in result]
+
+
 def to_json(obj: Any) -> str:
     if is_dataclass(obj):
         return json.dumps(asdict(obj), default=to_json)
@@ -128,37 +126,81 @@ def list_databases():
     return json.dumps(databases)
 
 
-def list_tables(database: str, like: Optional[str] = None, not_like: Optional[str] = None):
+def list_tables(database: str, like: Optional[str] = None, not_like: Optional[str] = None, only_comments: bool = False, ):
     """List available ClickHouse tables in a database, including schema, comment,
     row count, and column count."""
     logger.info(f"Listing tables in database '{database}'")
     client = create_clickhouse_client()
-    query = f"SELECT database, name, engine, create_table_query, dependencies_database, dependencies_table, engine_full, sorting_key, primary_key, total_rows, total_bytes, total_bytes_uncompressed, parts, active_parts, total_marks, comment FROM system.tables WHERE database = {format_query_value(database)}"
+    query = f"SELECT database, name, engine, total_rows, comment FROM system.tables WHERE database = {format_query_value(database)}"
     if like:
         query += f" AND name LIKE {format_query_value(like)}"
 
     if not_like:
         query += f" AND name NOT LIKE {format_query_value(not_like)}"
+    
+    if only_comments:
+        query += f" AND comment is not null"
 
     result = client.query(query)
 
     # Deserialize result as Table dataclass instances
     tables = result_to_table(result.column_names, result.result_rows)
 
-    for table in tables:
-        column_data_query = f"SELECT database, table, name, type AS column_type, default_kind, default_expression, comment FROM system.columns WHERE database = {format_query_value(database)} AND table = {format_query_value(table.name)}"
-        column_data_query_result = client.query(column_data_query)
-        table.columns = [
-            c
-            for c in result_to_column(
-                column_data_query_result.column_names,
-                column_data_query_result.result_rows,
-            )
-        ]
-
     logger.info(f"Found {len(tables)} tables")
     return [asdict(table) for table in tables]
 
+def list_columns(database: str, table: str, like: Optional[str] = None, not_like: Optional[str] = None, only_comments: bool = False ):
+    """List available ClickHouse columns in a database, including schema, comment"""
+    logger.info(f"Listing columns in table '{database}.{table}'")
+    client = create_clickhouse_client()
+
+    query = f"SELECT database, table, name, type AS column_type, default_kind, default_expression, comment FROM system.columns WHERE database = {format_query_value(database)} AND table = {format_query_value(table)}"
+
+    if like:
+        query += f" AND name LIKE {format_query_value(like)}"
+
+    if not_like:
+        query += f" AND name NOT LIKE {format_query_value(not_like)}"
+
+    if only_comments:
+        query += f" AND comment is not null"
+
+    result = client.query(query)
+    columns = [
+        c
+        for c in result_to_column(
+            result.column_names,
+            result.result_rows,
+        )
+    ]
+    
+    logger.info(f"Found {len(columns)} columns")
+    return [asdict(column) for column in columns]
+
+def get_terminology(key_like: Optional[str] = None, desc_like: Optional[str] = None):
+    """Data Catalog documentation related to business context and definitions of query terminology"""
+    logger.info(f"Getting llm catalog")
+    client = create_clickhouse_client()
+
+    query = f"SELECT key, description from spectrum.llm_catalog where 1=1"
+
+    if key_like and desc_like:
+        query += f"AND (key LIKE {format_query_value(key_like)} or description LIKE {format_query_value(desc_like)})"
+    if key_like:
+        query += f"AND key LIKE {format_query_value(key_like)}"
+    if desc_like:
+        query += f"AND description LIKE {format_query_value(desc_like)}"
+    result = client.query(query)
+    terms = [
+        c
+        for c in result_to_column(
+            result.column_names,
+            result.result_rows,
+        )
+    ]
+    
+    logger.info(f"Found {len(terms)} columns")
+    return [asdict(term) for term in terms]
 
 def execute_query(query: str):
     client = create_clickhouse_client()
@@ -338,6 +380,8 @@ if os.getenv("CLICKHOUSE_ENABLED", "true").lower() == "true":
     mcp.add_tool(Tool.from_function(list_databases))
     mcp.add_tool(Tool.from_function(list_tables))
     mcp.add_tool(Tool.from_function(run_select_query))
+    mcp.add_tool(Tool.from_function(list_columns))
+    mcp.add_tool(Tool.from_function(get_terminology))
     logger.info("ClickHouse tools registered")
 
 
