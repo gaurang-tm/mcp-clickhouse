@@ -139,7 +139,7 @@ def list_tables(database: str, like: Optional[str] = None, not_like: Optional[st
         query += f" AND name NOT LIKE {format_query_value(not_like)}"
     
     if only_comments:
-        query += f" AND comment is not null"
+        query += f" AND comment is not null AND comment != ''"
 
     result = client.query(query)
 
@@ -163,7 +163,7 @@ def list_columns(database: str, table: str, like: Optional[str] = None, not_like
         query += f" AND name NOT LIKE {format_query_value(not_like)}"
 
     if only_comments:
-        query += f" AND comment is not null"
+        query += f" AND comment is not null AND comment != ''"
 
     result = client.query(query)
     columns = [
@@ -193,13 +193,13 @@ def get_terminology(key_like: Optional[str] = None, desc_like: Optional[str] = N
     result = client.query(query)
     terms = [
         c
-        for c in result_to_column(
+        for c in result_to_catalog(
             result.column_names,
             result.result_rows,
         )
     ]
     
-    logger.info(f"Found {len(terms)} columns")
+    logger.info(f"Found {len(terms)} definition")
     return [asdict(term) for term in terms]
 
 def execute_query(query: str):
