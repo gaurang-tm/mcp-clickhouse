@@ -185,11 +185,11 @@ def get_terminology(key_like: Optional[str] = None, desc_like: Optional[str] = N
     query = f"SELECT key, description from spectrum.llm_catalog where 1=1"
 
     if key_like and desc_like:
-        query += f"AND (key LIKE {format_query_value(key_like)} or description LIKE {format_query_value(desc_like)})"
+        query += f" AND (key LIKE {format_query_value(key_like)} or description LIKE {format_query_value(desc_like)})"
     if key_like:
-        query += f"AND key LIKE {format_query_value(key_like)}"
+        query += f" AND key LIKE {format_query_value(key_like)}"
     if desc_like:
-        query += f"AND description LIKE {format_query_value(desc_like)}"
+        query += f" AND description LIKE {format_query_value(desc_like)}"
     result = client.query(query)
     terms = [
         c
