@@ -177,19 +177,19 @@ def list_columns(database: str, table: str, like: Optional[str] = None, not_like
     logger.info(f"Found {len(columns)} columns")
     return [asdict(column) for column in columns]
 
-def get_terminology(key_like: Optional[str] = None, desc_like: Optional[str] = None):
+def get_terminology():
     """Data Catalog documentation related to business context and definitions of query terminology"""
     logger.info(f"Getting llm catalog")
     client = create_clickhouse_client()
 
     query = f"SELECT key, description from spectrum.llm_catalog where 1=1"
 
-    if key_like and desc_like:
-        query += f" AND (key LIKE {format_query_value(key_like)} or description LIKE {format_query_value(desc_like)})"
-    if key_like:
-        query += f" AND key LIKE {format_query_value(key_like)}"
-    if desc_like:
-        query += f" AND description LIKE {format_query_value(desc_like)}"
+    # if key_like and desc_like:
+    #     query += f" AND (key LIKE {format_query_value(key_like)} or description LIKE {format_query_value(desc_like)})"
+    # if key_like:
+    #     query += f" AND key LIKE {format_query_value(key_like)}"
+    # if desc_like:
+    #     query += f" AND description LIKE {format_query_value(desc_like)}"
     result = client.query(query)
     terms = [
         c
